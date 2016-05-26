@@ -7,12 +7,11 @@ go:
   - tip
 
 script:
-  - go get github.com/PlanitarInc/go-workers
   - go get github.com/jteeuwen/go-bindata/...
+  - go get github.com/PlanitarInc/go-workers
   - go get github.com/gocql/gocql
   - go get github.com/onsi/gomega
-  - ls ${GOPATH}/bin
-  - PATH=${PATH}:${GOPATH}/bin make
+  - make
   - go test -v
 
 services:
