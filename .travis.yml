@@ -11,7 +11,8 @@ script:
   - go get github.com/jteeuwen/go-bindata
   - go get github.com/gocql/gocql
   - go get github.com/onsi/gomega
-  - make
+  - ls ${GOPATH}/bin
+  - PATH=${PATH}:${GOPATH}/bin make
   - go test -v
 
 services:
