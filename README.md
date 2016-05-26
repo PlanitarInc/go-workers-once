@@ -55,5 +55,4 @@ func main() {
   // In this example it will hang forever.
   once.WaitForJobType("myqueue", "add-1-2")
 }
-
 ```
