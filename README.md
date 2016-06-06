@@ -6,10 +6,15 @@ trying to avoid running same job type in parallel.
 
 **IMPORTANT**: the middleware does not work on top of vanilla
 [jrallison/go-workers](https://github.com/jrallison/go-workers),
-but requires a Planitar's fork
+but requires Planitar's fork
 [PlanitarInc/go-workers](https://github.com/PlanitarInc/go-workers).
 The fork adds a support for 2 additional functions:
 `PrepareEnqueuMsg()` and `EnqueueMsg()`.
+
+### Usage
+
+Enqueue your tasks with `EnqueueOnce()`, add a customized middleware
+to take care of these tasks.
 
 ### Example
 
@@ -37,10 +42,10 @@ func main() {
   workers.Process("myqueue", myJob, 20)
 
   // Enqueue jobs through once
-  // The job is added to the queue
-  once.Enqueue("myqueue", "add-1-2", []int{1, 2}, nil)
-  // The job is ignored
-  once.Enqueue("myqueue", "add-1-2", []int{1, 2}, nil)
+  // The job of type `add-1-2` is added to the queue
+  once.EnqueueOnce("myqueue", "add-1-2", []int{1, 2}, nil)
+  // The job of type `add-1-2` is ignored
+  once.EnqueueOnce("myqueue", "add-1-2", []int{1, 2}, nil)
 
   // Blocks until the enqueued job is done (either fails or succeeds)
   once.WaitForJobType("myqueue", "add-1-2")
