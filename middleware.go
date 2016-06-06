@@ -1,10 +1,6 @@
 package once
 
-import (
-	"fmt"
-
-	"github.com/PlanitarInc/go-workers"
-)
+import "github.com/PlanitarInc/go-workers"
 
 type Middleware struct{}
 
@@ -28,7 +24,6 @@ func (r *Middleware) Call(
 	defer func() {
 		if e := recover(); e != nil {
 			newRetryCount := r.getRetryCount(message)
-			fmt.Printf(" old retry count: %d, new retry count: %d\n", retryCount, newRetryCount)
 			if retryCount < newRetryCount {
 				updateJobStatus(conn, key, jid, StatusRetryWaiting, opts.RetryWaitTime)
 			} else {

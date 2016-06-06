@@ -2,7 +2,6 @@ package once
 
 import (
 	"encoding/json"
-	"fmt"
 	"time"
 
 	"github.com/PlanitarInc/go-workers"
@@ -31,7 +30,6 @@ func WaitForJobType(queue, jobType string, options ...WaitOptions) (*JobDesc, er
 			return nil, err
 		}
 
-		fmt.Printf("got: opts=%v, desc=%v, err=%s\n", opts, desc, err)
 		if desc == nil && opts.StopIfEmpty {
 			return nil, nil
 		}

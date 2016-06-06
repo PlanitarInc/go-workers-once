@@ -1,8 +1,6 @@
 package once
 
 import (
-	"fmt"
-
 	"github.com/PlanitarInc/go-workers-once/lua"
 	"github.com/garyburd/redigo/redis"
 )
@@ -14,9 +12,7 @@ var (
 )
 
 func updateJobStatus(conn redis.Conn, key, jid, status string, expire int) (int, error) {
-	res, err := redis.Int(updateStateScript.Do(conn, 1, key, jid, status, expire))
-	fmt.Printf(" update job state result: res=%d, err=%s\n", res, err)
-	return res, err
+	return redis.Int(updateStateScript.Do(conn, 1, key, jid, status, expire))
 }
 
 func init() {
