@@ -2,11 +2,16 @@ package once
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 
 	"github.com/PlanitarInc/go-workers"
 	"github.com/garyburd/redigo/redis"
+)
+
+var (
+	NoMatchingJobsErr = errors.New("no matching jobs found")
 )
 
 type WaitOptions struct {
@@ -47,7 +52,7 @@ func getDescriptor(conn redis.Conn, key string) (*JobDesc, error) {
 
 	// Job is not in the queue
 	if err == redis.ErrNil {
-		return nil, nil
+		return nil, NoMatchingJobsErr
 	}
 
 	desc := JobDesc{}
@@ -186,13 +191,13 @@ func (t jobTracker) getIfDone(
 	}
 
 	desc, err := getDescriptor(t.Conn, t.Key)
-	if err != nil {
+	if err != nil && err != NoMatchingJobsErr {
 		result <- &asyncResut{nil, err}
 		return
 	}
 
-	if desc == nil && t.Options.StopIfEmpty {
-		result <- &asyncResut{nil, nil}
+	if err == NoMatchingJobsErr && t.Options.StopIfEmpty {
+		result <- &asyncResut{nil, NoMatchingJobsErr}
 		return
 	}
 

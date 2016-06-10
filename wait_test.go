@@ -57,7 +57,7 @@ func TestGetDescriptor_NoKey(t *testing.T) {
 
 	{
 		desc, err := getDescriptor(conn, key)
-		Ω(err).Should(BeNil())
+		Ω(err).Should(Equal(NoMatchingJobsErr))
 		Ω(desc).Should(BeNil())
 	}
 }
@@ -202,7 +202,7 @@ func TestWaitForJobType_StopIfEmpty(t *testing.T) {
 		desc, err := WaitForJobType(queue, jobType, WaitOptions{
 			StopIfEmpty: true,
 		})
-		Ω(err).Should(BeNil())
+		Ω(err).Should(Equal(NoMatchingJobsErr))
 		Ω(desc).Should(BeNil())
 	}
 }
