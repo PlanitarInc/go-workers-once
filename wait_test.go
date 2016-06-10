@@ -165,9 +165,15 @@ func TestWaitForJobType_WaitUntilDone(t *testing.T) {
 	close(startWaitingC)
 
 	{
-		res, err := redis.String(conn.Do("SET", key, `{"jid":"1", "status":"ok"}`))
+		jsonVal := []byte(`{"jid":"1", "status":"ok"}`)
+
+		res, err := redis.String(conn.Do("SET", key, jsonVal))
 		Ω(err).Should(BeNil())
 		Ω(res).Should(Equal("OK"))
+
+		nreaders, err := redis.Int(conn.Do("PUBLISH", key, jsonVal))
+		Ω(err).Should(BeNil())
+		Ω(nreaders).Should(Equal(1))
 	}
 
 	<-doneWaitingC
@@ -245,9 +251,15 @@ func TestWaitForJobType_WaitUntilAddedAndDone(t *testing.T) {
 	close(startWaitingC)
 
 	{
-		res, err := redis.String(conn.Do("SET", key, `{"jid":"1", "status":"failed"}`))
+		jsonVal := []byte(`{"jid":"1", "status":"failed"}`)
+
+		res, err := redis.String(conn.Do("SET", key, jsonVal))
 		Ω(err).Should(BeNil())
 		Ω(res).Should(Equal("OK"))
+
+		nreaders, err := redis.Int(conn.Do("PUBLISH", key, jsonVal))
+		Ω(err).Should(BeNil())
+		Ω(nreaders).Should(Equal(1))
 	}
 
 	<-doneWaitingC
