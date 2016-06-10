@@ -56,6 +56,12 @@ func main() {
     StopIfEmpty: true,
   })
 
+  // Returns after 10 milliseconds since there are no jobs of type `add-1-2`
+  // in the queue.
+  once.WaitForJobType("myqueue", "add-1-2", WaitOptions{
+    Timeout: 10 * time.Millisecond,
+  })
+
   // Blocks until a job of type `add-1-2` is added to the queue.
   // In this example it will hang forever.
   once.WaitForJobType("myqueue", "add-1-2")
