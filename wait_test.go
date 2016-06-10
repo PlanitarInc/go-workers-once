@@ -1,6 +1,7 @@
 package once
 
 import (
+	"net"
 	"testing"
 	"time"
 
@@ -264,4 +265,31 @@ func TestWaitForJobType_WaitUntilAddedAndDone(t *testing.T) {
 
 	<-doneWaitingC
 	Ω(doneWaitingC).Should(BeClosed())
+}
+
+func TestWaitForJobType_NoRedisConnection(t *testing.T) {
+	RegisterTestingT(t)
+
+	workers.Configure(map[string]string{
+		"server":    "127.0.0.1:1",
+		"process":   "1",
+		"database":  "15",
+		"pool":      "1",
+		"namespace": "testns",
+	})
+
+	conn := workers.Config.Pool.Get()
+	defer conn.Close()
+
+	queue := "wait-6"
+	jobType := "email"
+
+	desc, err := WaitForJobType(queue, jobType)
+	Ω(err).ShouldNot(BeNil())
+	netErr, ok := err.(*net.OpError)
+	Ω(ok).Should(BeTrue())
+	Ω(netErr).ShouldNot(BeNil())
+	Ω(netErr.Op).Should(Equal("dial"))
+	Ω(netErr.Net).Should(Equal("tcp"))
+	Ω(desc).Should(BeNil())
 }
