@@ -3,8 +3,8 @@ package once
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"sync"
+	"time"
 
 	"github.com/PlanitarInc/go-workers"
 	"github.com/garyburd/redigo/redis"
@@ -12,16 +12,23 @@ import (
 
 var (
 	NoMatchingJobsErr = errors.New("no matching jobs found")
+	AbortedErr        = errors.New("aborted")
+	TimeoutErr        = errors.New("timeout")
 )
 
 type WaitOptions struct {
 	StopIfEmpty bool
+	Timeout     time.Duration
 }
 
 func WaitForJobType(queue, jobType string, options ...WaitOptions) (*JobDesc, error) {
 	opts := WaitOptions{}
 	if len(options) > 0 {
 		opts = options[0]
+	}
+
+	if opts.Timeout == 0 {
+		opts.Timeout = time.Hour
 	}
 
 	key := workers.Config.Namespace + "once:q:" + queue + ":" + jobType
@@ -73,6 +80,11 @@ type jobTracker struct {
 	aborted chan struct{}
 }
 
+type asyncResut struct {
+	JobDesc *JobDesc
+	Error   error
+}
+
 func (t *jobTracker) Wait() (*JobDesc, error) {
 	t.Conn = workers.Config.Pool.Get()
 	defer t.Conn.Close()
@@ -81,27 +93,26 @@ func (t *jobTracker) Wait() (*JobDesc, error) {
 	t.PubSubConn = &redis.PubSubConn{pubsubconn}
 	defer pubsubconn.Close()
 
+	// 2 is more than enough
+	result := make(chan *asyncResut, 2)
+	defer close(result)
+
 	wg := sync.WaitGroup{}
-	desc, err := t.waitForCompletion(&wg)
+	desc, err := t.waitForCompletion(&wg, result)
 	wg.Wait()
 
 	return desc, err
 }
 
-type asyncResut struct {
-	JobDesc *JobDesc
-	Error   error
-}
-
-func (t *jobTracker) waitForCompletion(wg *sync.WaitGroup) (*JobDesc, error) {
+func (t *jobTracker) waitForCompletion(
+	wg *sync.WaitGroup,
+	result chan *asyncResut,
+) (*JobDesc, error) {
 	var desc *JobDesc
 	var err error
 
 	t.aborted = make(chan struct{})
 	defer close(t.aborted)
-
-	result := make(chan *asyncResut)
-	defer close(result)
 
 	// The channel is used to sync the subscribe and getOnce goroutines.
 	subscribed := make(chan struct{})
@@ -110,7 +121,10 @@ func (t *jobTracker) waitForCompletion(wg *sync.WaitGroup) (*JobDesc, error) {
 	go t.subscribeWait(wg, result, subscribed)
 	defer t.unsubscribeWait()
 
-	go t.getIfDone(wg, result, subscribed)
+	desc, err = t.getIfDone(subscribed)
+	if desc != nil || err != nil {
+		return desc, err
+	}
 
 	select {
 	case res := <-result:
@@ -118,7 +132,10 @@ func (t *jobTracker) waitForCompletion(wg *sync.WaitGroup) (*JobDesc, error) {
 		err = res.Error
 
 	case <-t.aborted:
-		err = fmt.Errorf("Aborted")
+		err = AbortedErr
+
+	case <-time.After(t.Options.Timeout):
+		err = TimeoutErr
 	}
 
 	return desc, err
@@ -138,6 +155,7 @@ func (t jobTracker) subscribeWait(
 
 	if err := t.PubSubConn.Subscribe(t.Key); err != nil {
 		result <- &asyncResut{nil, err}
+		subscribed <- struct{}{}
 		return
 	}
 
@@ -176,33 +194,25 @@ func (t jobTracker) unsubscribeWait() {
 	t.PubSubConn.Unsubscribe(t.Key)
 }
 
-func (t jobTracker) getIfDone(
-	wg *sync.WaitGroup,
-	result chan<- *asyncResut,
-	subscribed <-chan struct{},
-) {
-	wg.Add(1)
-	defer wg.Done()
-
+func (t jobTracker) getIfDone(subscribed <-chan struct{}) (*JobDesc, error) {
 	// Wait until we're subscribed to the job updates
 	_, ok := <-subscribed
 	if !ok {
-		return
+		return nil, nil
 	}
 
 	desc, err := getDescriptor(t.Conn, t.Key)
 	if err != nil && err != NoMatchingJobsErr {
-		result <- &asyncResut{nil, err}
-		return
+		return nil, err
 	}
 
 	if err == NoMatchingJobsErr && t.Options.StopIfEmpty {
-		result <- &asyncResut{nil, NoMatchingJobsErr}
-		return
+		return nil, NoMatchingJobsErr
 	}
 
 	if desc != nil && desc.IsDone() {
-		result <- &asyncResut{desc, nil}
-		return
+		return desc, nil
 	}
+
+	return nil, nil
 }

@@ -293,3 +293,69 @@ func TestWaitForJobType_NoRedisConnection(t *testing.T) {
 	Ω(netErr.Net).Should(Equal("tcp"))
 	Ω(desc).Should(BeNil())
 }
+
+func TestWaitForJobType_Timeout(t *testing.T) {
+	RegisterTestingT(t)
+
+	setupRedis()
+	defer cleanRedis()
+
+	conn := workers.Config.Pool.Get()
+	defer conn.Close()
+
+	queue := "wait-7"
+	jobType := "email"
+	key := workers.Config.Namespace + "once:q:" + queue + ":" + jobType
+
+	{
+		_, err := redis.String(conn.Do("GET", key))
+		Ω(err).Should(Equal(redis.ErrNil))
+	}
+
+	{
+		desc, err := WaitForJobType(queue, jobType, WaitOptions{
+			Timeout: time.Microsecond,
+		})
+		Ω(err).Should(Equal(TimeoutErr))
+		Ω(desc).Should(BeNil())
+	}
+
+	{
+		desc, err := WaitForJobType(queue, jobType, WaitOptions{
+			Timeout: time.Nanosecond,
+		})
+		Ω(err).Should(Equal(TimeoutErr))
+		Ω(desc).Should(BeNil())
+	}
+}
+
+func TestWaitForJobType_OkWithSmallTimeout(t *testing.T) {
+	RegisterTestingT(t)
+
+	setupRedis()
+	defer cleanRedis()
+
+	conn := workers.Config.Pool.Get()
+	defer conn.Close()
+
+	queue := "wait-8"
+	jobType := "email"
+	key := workers.Config.Namespace + "once:q:" + queue + ":" + jobType
+
+	{
+		res, err := redis.String(conn.Do("SET", key, `{"jid":"1", "status":"ok"}`))
+		Ω(err).Should(BeNil())
+		Ω(res).Should(Equal("OK"))
+	}
+
+	{
+		desc, err := WaitForJobType(queue, jobType, WaitOptions{
+			Timeout: time.Nanosecond,
+		})
+		Ω(err).Should(BeNil())
+		Ω(desc).Should(Equal(&JobDesc{
+			Jid:    "1",
+			Status: StatusOK,
+		}))
+	}
+}
