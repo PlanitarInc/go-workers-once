@@ -359,3 +359,77 @@ func TestWaitForJobType_OkWithSmallTimeout(t *testing.T) {
 		}))
 	}
 }
+
+func TestWaitForJobType_FalsePublish(t *testing.T) {
+	RegisterTestingT(t)
+
+	setupRedis()
+	defer cleanRedis()
+
+	conn := workers.Config.Pool.Get()
+	defer conn.Close()
+
+	queue := "wait-5"
+	jobType := "email"
+	key := workers.Config.Namespace + "once:q:" + queue + ":" + jobType
+
+	{
+		_, err := redis.String(conn.Do("GET", key))
+		Ω(err).Should(Equal(redis.ErrNil))
+	}
+
+	startWaitingC := make(chan struct{})
+	doneWaitingC := make(chan struct{})
+
+	// Start waiting goroutine
+	go func() {
+		go func() {
+			time.Sleep(10 * time.Millisecond)
+			startWaitingC <- struct{}{}
+		}()
+
+		desc, err := WaitForJobType(queue, jobType)
+		Ω(startWaitingC).Should(BeClosed())
+		Ω(err).Should(BeNil())
+		Ω(desc).Should(Equal(&JobDesc{
+			Jid:    "1",
+			Status: StatusOK,
+		}))
+		close(doneWaitingC)
+	}()
+
+	// Wait until waiting go routing is ready
+	<-startWaitingC
+	time.Sleep(10 * time.Millisecond)
+	close(startWaitingC)
+
+	{
+		jsonVal := []byte(`{"jid":"1", "status":"executing"}`)
+
+		res, err := redis.String(conn.Do("SET", key, jsonVal))
+		Ω(err).Should(BeNil())
+		Ω(res).Should(Equal("OK"))
+
+		nreaders, err := redis.Int(conn.Do("PUBLISH", key, jsonVal))
+		Ω(err).Should(BeNil())
+		Ω(nreaders).Should(Equal(1))
+	}
+
+	time.Sleep(10 * time.Millisecond)
+	Ω(doneWaitingC).ShouldNot(BeClosed())
+
+	{
+		jsonVal := []byte(`{"jid":"1", "status":"ok"}`)
+
+		res, err := redis.String(conn.Do("SET", key, jsonVal))
+		Ω(err).Should(BeNil())
+		Ω(res).Should(Equal("OK"))
+
+		nreaders, err := redis.Int(conn.Do("PUBLISH", key, jsonVal))
+		Ω(err).Should(BeNil())
+		Ω(nreaders).Should(Equal(1))
+	}
+
+	<-doneWaitingC
+	Ω(doneWaitingC).Should(BeClosed())
+}
