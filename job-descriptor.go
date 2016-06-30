@@ -1,6 +1,9 @@
 package once
 
-import "github.com/bitly/go-simplejson"
+import (
+	"github.com/PlanitarInc/go-workers"
+	"github.com/bitly/go-simplejson"
+)
 
 const (
 	StatusInitWaiting  string = "init-waiting"
@@ -19,6 +22,7 @@ type JobDesc struct {
 }
 
 type Options struct {
+	workers.EnqueueOptions
 	InitWaitTime     int `json:"init_wait"`
 	RetryWaitTime    int `json:"retry_wait"`
 	ExecWaitTime     int `json:"exec_wait"`
