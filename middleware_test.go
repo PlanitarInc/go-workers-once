@@ -314,8 +314,8 @@ func TestMiddlewareCall_NoXOnce(t *testing.T) {
 		"jid": "6",
 		"retry": true
 	}`)
-	queue := "tur-wrong-jid"
-	key := workers.Config.Namespace + "once:q:tur-wrong-jid:"
+	queue := "tur-no-x-once"
+	key := workers.Config.Namespace + "once:q:tur-no-x-once:"
 
 	m := Middleware{}
 
@@ -341,6 +341,51 @@ func TestMiddlewareCall_NoXOnce(t *testing.T) {
 		res, err := redis.Int(conn.Do("TTL", key))
 		Ω(err).Should(BeNil())
 		Ω(res).Should(Equal(-1))
+	}
+}
+
+func TestMiddlewareCall_NamespacedQueue(t *testing.T) {
+	RegisterTestingT(t)
+
+	setupRedis()
+	defer cleanRedis()
+
+	conn := workers.Config.Pool.Get()
+	defer conn.Close()
+
+	msg, _ := workers.NewMsg(`{
+		"jid": "1",
+		"retry": true,
+		"x-once": {
+			"job_type": "dolev"
+		}
+	}`)
+	queue := "tur-namespaced-queue"
+	key := workers.Config.Namespace + "once:q:tur-namespaced-queue:dolev"
+
+	m := Middleware{}
+
+	{
+		res, err := redis.String(conn.Do("SET", key, `{"jid":"1"}`))
+		Ω(err).Should(BeNil())
+		Ω(res).Should(Equal("OK"))
+	}
+
+	{
+		ack := m.Call(workers.Config.Namespace+queue, msg, noopNext)
+		Ω(ack).Should(BeTrue())
+	}
+
+	{
+		res, err := redis.Bytes(conn.Do("GET", key))
+		Ω(err).Should(BeNil())
+		Ω(res).Should(MatchJSON(`{"jid":"1","status":"ok"}`))
+	}
+
+	{
+		res, err := redis.Int(conn.Do("TTL", key))
+		Ω(err).Should(BeNil())
+		Ω(res).Should(Equal(5))
 	}
 }
 

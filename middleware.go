@@ -1,6 +1,10 @@
 package once
 
-import "github.com/PlanitarInc/go-workers"
+import (
+	"strings"
+
+	"github.com/PlanitarInc/go-workers"
+)
 
 type Middleware struct{}
 
@@ -20,7 +24,8 @@ func (r *Middleware) Call(
 
 	jid := message.Jid()
 	jobType, _ := jobDesc.Get("job_type").String()
-	key := workers.Config.Namespace + "once:q:" + queue + ":" + jobType
+	cleanQueuename := strings.TrimPrefix(queue, workers.Config.Namespace)
+	key := workers.Config.Namespace + "once:q:" + cleanQueuename + ":" + jobType
 	opts := optionsFromJson(jobDesc.Get("options"))
 
 	// XXX A hack to see whether a retry middleware is active and the job was
