@@ -159,8 +159,6 @@ func (t jobTracker) subscribeWait(
 		return
 	}
 
-	subscribed <- struct{}{}
-
 	for {
 		switch v := t.PubSubConn.Receive().(type) {
 		case redis.Message:
@@ -179,7 +177,9 @@ func (t jobTracker) subscribeWait(
 			}
 
 		case redis.Subscription:
-			if v.Count == 0 {
+			if v.Kind == "subscribe" && v.Count == 1 {
+				subscribed <- struct{}{}
+			} else if v.Count == 0 {
 				return
 			}
 
