@@ -12,10 +12,16 @@ func (r *Middleware) Call(
 	conn := workers.Config.Pool.Get()
 	defer conn.Close()
 
+	jobDesc, ok := message.CheckGet("x-once")
+	if !ok {
+		acknowledge = next()
+		return
+	}
+
 	jid := message.Jid()
-	jobType, _ := message.Get("x-once").Get("job_type").String()
+	jobType, _ := jobDesc.Get("job_type").String()
 	key := workers.Config.Namespace + "once:q:" + queue + ":" + jobType
-	opts := optionsFromJson(message.Get("x-once").Get("options"))
+	opts := optionsFromJson(jobDesc.Get("options"))
 
 	// XXX A hack to see whether a retry middleware is active and the job was
 	// rescheduled: if the retry counter increased, the job was rescheduled.

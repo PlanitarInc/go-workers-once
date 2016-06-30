@@ -298,6 +298,52 @@ func TestMiddlewareCall_WrongJid(t *testing.T) {
 	}
 }
 
+func TestMiddlewareCall_NoXOnce(t *testing.T) {
+	RegisterTestingT(t)
+
+	setupRedis()
+	defer cleanRedis()
+
+	conn := workers.Config.Pool.Get()
+	defer conn.Close()
+
+	// there is no `x-once` field, basically meaning the job was not
+	// enqueued using the right `Enqueue`; hence the middleware
+	// should just execute the job and do nothing other.
+	msg, _ := workers.NewMsg(`{
+		"jid": "6",
+		"retry": true
+	}`)
+	queue := "tur-wrong-jid"
+	key := workers.Config.Namespace + "once:q:tur-wrong-jid:"
+
+	m := Middleware{}
+
+	{
+		res, err := redis.String(conn.Do("SET", key, `{"jid":"6"}`))
+		Ω(err).Should(BeNil())
+		Ω(res).Should(Equal("OK"))
+	}
+
+	{
+		ack := m.Call(queue, msg, noopNext)
+		Ω(ack).Should(BeTrue())
+	}
+
+	{
+		// Although the JID matches, the key should be ignored
+		res, err := redis.Bytes(conn.Do("GET", key))
+		Ω(err).Should(BeNil())
+		Ω(res).Should(MatchJSON(`{"jid":"6"}`))
+	}
+
+	{
+		res, err := redis.Int(conn.Do("TTL", key))
+		Ω(err).Should(BeNil())
+		Ω(res).Should(Equal(-1))
+	}
+}
+
 func noopNext() bool {
 	return true
 }
