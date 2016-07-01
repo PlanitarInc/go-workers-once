@@ -80,6 +80,10 @@ func (d JobDesc) IsDone() bool {
 	return d.Status == StatusOK || d.Status == StatusFailed
 }
 
+func (d JobDesc) IsFailed() bool {
+	return d.Status == StatusFailed
+}
+
 func (d JobDesc) IsOK() bool {
 	return d.Status == StatusOK
 }
