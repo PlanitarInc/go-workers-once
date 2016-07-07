@@ -23,16 +23,18 @@ type JobDesc struct {
 
 type Options struct {
 	workers.EnqueueOptions
-	InitWaitTime     int `json:"init_wait"`
-	RetryWaitTime    int `json:"retry_wait"`
-	ExecWaitTime     int `json:"exec_wait"`
-	SuccessRetention int `json:"success_retention"`
-	FailureRetention int `json:"failure_retention"`
+	AtMostOnce       bool `json:"at_most_once"`
+	InitWaitTime     int  `json:"init_wait"`
+	RetryWaitTime    int  `json:"retry_wait"`
+	ExecWaitTime     int  `json:"exec_wait"`
+	SuccessRetention int  `json:"success_retention"`
+	FailureRetention int  `json:"failure_retention"`
 }
 
 func optionsFromJson(obj *simplejson.Json) *Options {
 	opts := Options{}
 
+	opts.AtMostOnce, _ = obj.Get("at_most_once").Bool()
 	opts.InitWaitTime, _ = obj.Get("init_wait").Int()
 	opts.RetryWaitTime, _ = obj.Get("retry_wait").Int()
 	opts.ExecWaitTime, _ = obj.Get("exec_wait").Int()
