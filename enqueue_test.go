@@ -386,3 +386,74 @@ func TestEnqueueJobDesc_Overrides(t *testing.T) {
 			MatchJSON(`{"jid":"3","queue":"tor-overrides","class":"","args":null}`))
 	}
 }
+
+func TestEnqueueJobDesc_WithOptions(t *testing.T) {
+	RegisterTestingT(t)
+
+	setupRedis()
+	defer cleanRedis()
+
+	conn := workers.Config.Pool.Get()
+	defer conn.Close()
+
+	opts := Options{
+		EnqueueOptions: workers.EnqueueOptions{
+			Retry: true, RetryCount: 2, At: 9.9,
+		},
+	}
+	desc := NewJobDesc("5", "tor-with-options", "typo", &opts)
+	key := workers.Config.Namespace + "once:q:tor-with-options:typo"
+	descJson, _ := json.Marshal(desc)
+
+	{
+		res, err := redis.String(conn.Do("GET", key))
+		Ω(err).Should(Equal(redis.ErrNil))
+		Ω(res).Should(BeEmpty())
+	}
+
+	{
+		jid, err := enqueueJobDesc(desc, nil)
+		Ω(err).Should(BeNil())
+		Ω(jid).Should(Equal("5"))
+	}
+
+	{
+		res, err := redis.Bytes(conn.Do("GET", key))
+		Ω(err).Should(BeNil())
+		Ω(res).Should(Equal(descJson))
+	}
+
+	{
+		res, err := redis.Int(conn.Do("TTL", key))
+		Ω(err).Should(BeNil())
+		Ω(res).Should(Equal(30))
+	}
+
+	{
+		queue := workers.Config.Namespace + "queue:tor-with-options"
+		bs, err := redis.Bytes(conn.Do("lpop", queue))
+		Ω(err).Should(BeNil())
+
+		msg, err := simplejson.NewJson(bs)
+		Ω(err).Should(BeNil())
+		Ω(msg).ShouldNot(BeNil())
+
+		tmp, err := msg.Get("x-once").Encode()
+		Ω(err).Should(BeNil())
+		Ω(tmp).Should(MatchJSON(descJson))
+
+		msg.Del("class")
+		msg.Del("enqueued_at")
+		msg.Del("x-once")
+		tmp, err = msg.Encode()
+		Ω(err).Should(BeNil())
+		Ω(tmp).Should(MatchJSON(`{
+			"jid": "5",
+			"queue": "tor-with-options",
+			"args": null,
+			"retry": true,
+			"retry_count": 2,
+			"at":9.9
+		}`))
+	}
+}

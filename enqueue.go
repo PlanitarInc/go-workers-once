@@ -2,6 +2,7 @@ package once
 
 import (
 	"encoding/json"
+	"time"
 
 	"github.com/PlanitarInc/go-workers"
 	"github.com/garyburd/redigo/redis"
@@ -17,6 +18,20 @@ func Enqueue(
 	desc := NewJobDesc(jid, queue, jobType, opts)
 
 	return enqueueJobDesc(desc, args)
+}
+
+func EnqueueIn(
+	queue, jobType string,
+	in time.Duration,
+	args interface{},
+	opts *Options,
+) (string, error) {
+	if opts == nil {
+		opts = &Options{}
+	}
+	opts.At = workers.NowToSecondsWithNanoPrecision() + in.Seconds()
+
+	return Enqueue(queue, jobType, args, opts)
 }
 
 func EnqueueForce(
