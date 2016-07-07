@@ -36,7 +36,8 @@ func enqueueJobDesc(desc *JobDesc, args interface{}, override ...bool) (string, 
 
 	key := workers.Config.Namespace + "once:q:" + desc.Queue + ":" + desc.JobType
 
-	msg := workers.PrepareEnqueuMsg(desc.Queue, "", args)
+	msg := workers.PrepareEnqueuMsg(desc.Queue, "", args,
+		desc.Options.EnqueueOptions)
 	msg.Set("jid", desc.Jid)
 	msg.Set("x-once", desc)
 
