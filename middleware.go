@@ -45,7 +45,19 @@ func (r *Middleware) Call(
 		}
 	}()
 
-	updateJobStatus(conn, key, jid, StatusExecuting, opts.ExecWaitTime)
+	n, _ := updateJobStatus(conn, key, jid, StatusExecuting, opts.ExecWaitTime)
+	if opts.AtMostOnce && n < 0 {
+		// Two reasons for getting here:
+		//  - (n=-1) the retention init/retry period of the job has elapsed,
+		//    the job descriptor was removed from Redis;
+		//  - (n=-2) another job of the same type has been scheduled after
+		//    current one.
+		// In both cases, the job is kind of lost for the outer world, so we
+		// should silently drop it.
+		acknowledge = true
+		return
+	}
+
 	acknowledge = next()
 	updateJobStatus(conn, key, jid, StatusOK, opts.SuccessRetention)
 

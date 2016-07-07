@@ -36,8 +36,10 @@ func TestMiddlewareCall(t *testing.T) {
 	}
 
 	{
+		counter, noopNext := getCountableCb()
 		ack := m.Call(queue, msg, noopNext)
 		Ω(ack).Should(BeTrue())
+		Ω(*counter).Should(Equal(1))
 	}
 
 	{
@@ -243,8 +245,10 @@ func TestMiddlewareCall_NoKey(t *testing.T) {
 	}
 
 	{
+		counter, noopNext := getCountableCb()
 		ack := m.Call(queue, msg, noopNext)
 		Ω(ack).Should(BeTrue())
+		Ω(*counter).Should(Equal(1))
 	}
 
 	{
@@ -281,8 +285,10 @@ func TestMiddlewareCall_WrongJid(t *testing.T) {
 	}
 
 	{
+		counter, noopNext := getCountableCb()
 		ack := m.Call(queue, msg, noopNext)
 		Ω(ack).Should(BeTrue())
+		Ω(*counter).Should(Equal(1))
 	}
 
 	{
@@ -326,8 +332,10 @@ func TestMiddlewareCall_NoXOnce(t *testing.T) {
 	}
 
 	{
+		counter, noopNext := getCountableCb()
 		ack := m.Call(queue, msg, noopNext)
 		Ω(ack).Should(BeTrue())
+		Ω(*counter).Should(Equal(1))
 	}
 
 	{
@@ -372,8 +380,10 @@ func TestMiddlewareCall_NamespacedQueue(t *testing.T) {
 	}
 
 	{
+		counter, noopNext := getCountableCb()
 		ack := m.Call(workers.Config.Namespace+queue, msg, noopNext)
 		Ω(ack).Should(BeTrue())
+		Ω(*counter).Should(Equal(1))
 	}
 
 	{
@@ -389,8 +399,64 @@ func TestMiddlewareCall_NamespacedQueue(t *testing.T) {
 	}
 }
 
-func noopNext() bool {
-	return true
+func TestMiddlewareCall_AtMostOnce(t *testing.T) {
+	RegisterTestingT(t)
+
+	setupRedis()
+	defer cleanRedis()
+
+	conn := workers.Config.Pool.Get()
+	defer conn.Close()
+
+	msg, _ := workers.NewMsg(`{
+		"jid": "7",
+		"retry": true,
+		"x-once": {
+			"job_type": "shabtai",
+			"options": {
+				"at_most_once": true
+			}
+		}
+	}`)
+	queue := "tur-once-at-most"
+	key := workers.Config.Namespace + "once:q:tur-once-at-most:shabtai"
+
+	m := Middleware{}
+
+	{
+		res, err := redis.String(conn.Do("SET", key, `{"jid":"123"}`))
+		Ω(err).Should(BeNil())
+		Ω(res).Should(Equal("OK"))
+	}
+
+	{
+		counter, noopNext := getCountableCb()
+		ack := m.Call(queue, msg, noopNext)
+		Ω(ack).Should(BeTrue())
+		Ω(*counter).Should(Equal(0))
+	}
+
+	{
+		res, err := redis.Bytes(conn.Do("GET", key))
+		Ω(err).Should(BeNil())
+		Ω(res).Should(MatchJSON(`{"jid":"123"}`))
+	}
+
+	{
+		res, err := redis.Int(conn.Do("TTL", key))
+		Ω(err).Should(BeNil())
+		Ω(res).Should(Equal(-1))
+	}
+}
+
+func getCountableCb() (*int, func() bool) {
+	callCounter := 0
+	cb := func() bool {
+		callCounter++
+		return true
+	}
+
+	return &callCounter, cb
 }
 
 func panicNext() bool {
