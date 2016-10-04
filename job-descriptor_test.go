@@ -2,6 +2,7 @@ package once
 
 import (
 	"testing"
+	"time"
 
 	. "github.com/onsi/gomega"
 )
@@ -58,4 +59,18 @@ func TestOptionsMergeDefaults_Partial(t *testing.T) {
 	Ω(opts.ExecWaitTime).Should(Equal(-12))
 	Ω(opts.SuccessRetention).Should(Equal(5))
 	Ω(opts.FailureRetention).Should(Equal(1))
+}
+
+func TestNewJobDesc(t *testing.T) {
+	RegisterTestingT(t)
+
+	d := NewJobDesc("1", "ochered:2", "tipa-joba", nil)
+
+	Ω(d.Jid).Should(Equal("1"))
+	Ω(d.Queue).Should(Equal("ochered:2"))
+	Ω(d.JobType).Should(Equal("tipa-joba"))
+
+	nowMs := time2ms(time.Now())
+	Ω(d.CreatedMs).Should(BeBetween(nowMs-100, nowMs+100))
+	Ω(d.UpdatedMs).Should(Equal(int64(0)))
 }

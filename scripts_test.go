@@ -2,6 +2,7 @@ package once
 
 import (
 	"testing"
+	"time"
 
 	"github.com/PlanitarInc/go-workers"
 	"github.com/garyburd/redigo/redis"
@@ -27,7 +28,8 @@ func TestUpdateJobStatus(t *testing.T) {
 	}
 
 	{
-		res, err := updateJobStatus(conn, key, "1", "BEGALA", 10)
+		res, err := updateJobStatusAt(conn, key, "1", "BEGALA", 10,
+			time.Unix(1, 1e6))
 		Ω(err).Should(BeNil())
 		Ω(res).Should(Equal(0))
 	}
@@ -35,7 +37,11 @@ func TestUpdateJobStatus(t *testing.T) {
 	{
 		res, err := redis.String(conn.Do("GET", key))
 		Ω(err).Should(BeNil())
-		Ω(res).Should(Equal(`{"jid":"1","status":"BEGALA"}`))
+		Ω(res).Should(MatchJSON(`{
+			"jid":"1",
+			"status":"BEGALA",
+			"updated_ms":1001
+		}`))
 	}
 
 	{
@@ -63,7 +69,8 @@ func TestUpdateJobStatus_NoKey(t *testing.T) {
 	}
 
 	{
-		res, err := updateJobStatus(conn, key, "1", "PRIGALA", 10)
+		res, err := updateJobStatusAt(conn, key, "1", "PRIGALA", 10,
+			time.Unix(1, 1e6))
 		Ω(err).Should(BeNil())
 		Ω(res).Should(Equal(-1))
 	}
@@ -94,7 +101,8 @@ func TestUpdateJobStatus_WrongJID(t *testing.T) {
 	}
 
 	{
-		res, err := updateJobStatus(conn, key, "–", "POLZALA", 10)
+		res, err := updateJobStatusAt(conn, key, "–", "POLZALA", 10,
+			time.Unix(1, 1e6))
 		Ω(err).Should(BeNil())
 		Ω(res).Should(Equal(-2))
 	}

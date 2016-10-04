@@ -1,6 +1,8 @@
 package once
 
 import (
+	"time"
+
 	"github.com/PlanitarInc/go-workers"
 	"github.com/bitly/go-simplejson"
 )
@@ -14,11 +16,13 @@ const (
 )
 
 type JobDesc struct {
-	Jid     string   `json:"jid"`
-	Status  string   `json:"status"`
-	Queue   string   `json:"queue"`
-	JobType string   `json:"job_type"`
-	Options *Options `json:"options"`
+	Jid       string   `json:"jid"`
+	Status    string   `json:"status"`
+	Queue     string   `json:"queue"`
+	JobType   string   `json:"job_type"`
+	CreatedMs int64    `json:"created_ms"`
+	UpdatedMs int64    `json:"updated_ms"`
+	Options   *Options `json:"options"`
 }
 
 type Options struct {
@@ -70,11 +74,12 @@ func optionsMergeDefaults(opts *Options) *Options {
 
 func NewJobDesc(jid, queue, jobType string, opts *Options) *JobDesc {
 	return &JobDesc{
-		Jid:     jid,
-		Status:  StatusInitWaiting,
-		Queue:   queue,
-		JobType: jobType,
-		Options: optionsMergeDefaults(opts),
+		Jid:       jid,
+		Status:    StatusInitWaiting,
+		Queue:     queue,
+		JobType:   jobType,
+		CreatedMs: time2ms(time.Now()),
+		Options:   optionsMergeDefaults(opts),
 	}
 }
 
@@ -88,4 +93,20 @@ func (d JobDesc) IsFailed() bool {
 
 func (d JobDesc) IsOK() bool {
 	return d.Status == StatusOK
+}
+
+func (d JobDesc) CreatedAt() time.Time {
+	return ms2time(d.CreatedMs)
+}
+
+func (d JobDesc) UpdatedAt() time.Time {
+	return ms2time(d.UpdatedMs)
+}
+
+func time2ms(t time.Time) int64 {
+	return t.UnixNano() / 1e6
+}
+
+func ms2time(ms int64) time.Time {
+	return time.Unix(ms/1000, (ms%1000)*1e6)
 }

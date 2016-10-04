@@ -1,6 +1,8 @@
 package once
 
 import (
+	"time"
+
 	"github.com/PlanitarInc/go-workers-once/lua"
 	"github.com/garyburd/redigo/redis"
 )
@@ -11,8 +13,23 @@ var (
 	updateStateScript *redis.Script
 )
 
-func updateJobStatus(conn redis.Conn, key, jid, status string, expire int) (int, error) {
-	return redis.Int(updateStateScript.Do(conn, 1, key, jid, status, expire))
+func updateJobStatus(
+	conn redis.Conn,
+	key, jid, status string,
+	expire int,
+) (int, error) {
+	return updateJobStatusAt(conn, key, jid, status, expire, time.Now())
+}
+
+func updateJobStatusAt(
+	conn redis.Conn,
+	key, jid, status string,
+	expire int,
+	updatedAt time.Time,
+) (int, error) {
+	updatedMs := time2ms(updatedAt)
+	res, err := updateStateScript.Do(conn, 1, key, jid, status, expire, updatedMs)
+	return redis.Int(res, err)
 }
 
 func init() {

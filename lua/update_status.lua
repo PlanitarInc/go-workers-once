@@ -4,6 +4,7 @@
 --  [1] Expected JID
 --  [2] New status of the job
 --  [3] New expiration time for the job descriptor
+--  [4] New last update timestamp (in ms) for the job descriptor
 --
 --  Return values:
 --    0  in case of success
@@ -22,6 +23,7 @@ if val["jid"] ~= ARGV[1] then
 end
 
 val["status"] = ARGV[2]
+val["updated_ms"] = tonumber(ARGV[4])
 
 local valJson = cjson.encode(val)
 redis.call("SET", KEYS[1], valJson)

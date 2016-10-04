@@ -1,7 +1,9 @@
 package once
 
 import (
+	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/PlanitarInc/go-workers"
 	"github.com/garyburd/redigo/redis"
@@ -45,7 +47,16 @@ func TestMiddlewareCall(t *testing.T) {
 	{
 		res, err := redis.Bytes(conn.Do("GET", key))
 		Ω(err).Should(BeNil())
-		Ω(res).Should(MatchJSON(`{"jid":"1","status":"ok"}`))
+
+		resObj := map[string]interface{}{}
+		err = json.Unmarshal(res, &resObj)
+		Ω(err).Should(BeNil())
+
+		Ω(resObj["jid"]).Should(Equal("1"))
+		Ω(resObj["status"]).Should(Equal("ok"))
+
+		nowMs := time.Now().UnixNano() / 1e6
+		Ω(resObj["updated_ms"]).Should(BeBetween(nowMs-100, nowMs+100))
 	}
 
 	{
@@ -109,8 +120,18 @@ func TestMiddlewareCall_Processing(t *testing.T) {
 		{ // Make sure the job status is set to "executing"
 			res, err := redis.Bytes(conn.Do("GET", key))
 			Ω(err).Should(BeNil())
-			Ω(res).Should(MatchJSON(`{"jid":"2","status":"executing"}`))
+
+			resObj := map[string]interface{}{}
+			err = json.Unmarshal(res, &resObj)
+			Ω(err).Should(BeNil())
+
+			Ω(resObj["jid"]).Should(Equal("2"))
+			Ω(resObj["status"]).Should(Equal("executing"))
+
+			nowMs := time.Now().UnixNano() / 1e6
+			Ω(resObj["updated_ms"]).Should(BeBetween(nowMs-100, nowMs+100))
 		}
+
 		{
 			res, err := redis.Int(conn.Do("TTL", key))
 			Ω(err).Should(BeNil())
@@ -159,7 +180,16 @@ func TestMiddlewareCall_Failed(t *testing.T) {
 	{
 		res, err := redis.Bytes(conn.Do("GET", key))
 		Ω(err).Should(BeNil())
-		Ω(res).Should(MatchJSON(`{"jid":"3","status":"failed"}`))
+
+		resObj := map[string]interface{}{}
+		err = json.Unmarshal(res, &resObj)
+		Ω(err).Should(BeNil())
+
+		Ω(resObj["jid"]).Should(Equal("3"))
+		Ω(resObj["status"]).Should(Equal("failed"))
+
+		nowMs := time.Now().UnixNano() / 1e6
+		Ω(resObj["updated_ms"]).Should(BeBetween(nowMs-100, nowMs+100))
 	}
 
 	{
@@ -208,7 +238,16 @@ func TestMiddlewareCall_Retrying(t *testing.T) {
 	{
 		res, err := redis.Bytes(conn.Do("GET", key))
 		Ω(err).Should(BeNil())
-		Ω(res).Should(MatchJSON(`{"jid":"4","status":"retry-waiting"}`))
+
+		resObj := map[string]interface{}{}
+		err = json.Unmarshal(res, &resObj)
+		Ω(err).Should(BeNil())
+
+		Ω(resObj["jid"]).Should(Equal("4"))
+		Ω(resObj["status"]).Should(Equal("retry-waiting"))
+
+		nowMs := time.Now().UnixNano() / 1e6
+		Ω(resObj["updated_ms"]).Should(BeBetween(nowMs-100, nowMs+100))
 	}
 
 	{
@@ -362,7 +401,7 @@ func TestMiddlewareCall_NamespacedQueue(t *testing.T) {
 	defer conn.Close()
 
 	msg, _ := workers.NewMsg(`{
-		"jid": "1",
+		"jid": "7",
 		"retry": true,
 		"x-once": {
 			"job_type": "dolev"
@@ -374,7 +413,7 @@ func TestMiddlewareCall_NamespacedQueue(t *testing.T) {
 	m := Middleware{}
 
 	{
-		res, err := redis.String(conn.Do("SET", key, `{"jid":"1"}`))
+		res, err := redis.String(conn.Do("SET", key, `{"jid":"7"}`))
 		Ω(err).Should(BeNil())
 		Ω(res).Should(Equal("OK"))
 	}
@@ -389,7 +428,16 @@ func TestMiddlewareCall_NamespacedQueue(t *testing.T) {
 	{
 		res, err := redis.Bytes(conn.Do("GET", key))
 		Ω(err).Should(BeNil())
-		Ω(res).Should(MatchJSON(`{"jid":"1","status":"ok"}`))
+
+		resObj := map[string]interface{}{}
+		err = json.Unmarshal(res, &resObj)
+		Ω(err).Should(BeNil())
+
+		Ω(resObj["jid"]).Should(Equal("7"))
+		Ω(resObj["status"]).Should(Equal("ok"))
+
+		nowMs := time.Now().UnixNano() / 1e6
+		Ω(resObj["updated_ms"]).Should(BeBetween(nowMs-100, nowMs+100))
 	}
 
 	{
