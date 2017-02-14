@@ -18,7 +18,16 @@ func updateJobStatus(
 	key, jid, status string,
 	expire int,
 ) (int, error) {
-	return updateJobStatusAt(conn, key, jid, status, expire, time.Now())
+	return updateJobStatusAt(conn, key, jid, status, expire, time.Now(), "")
+}
+
+func updateJobStatusWithResult(
+	conn redis.Conn,
+	key, jid, status string,
+	expire int,
+	result string,
+) (int, error) {
+	return updateJobStatusAt(conn, key, jid, status, expire, time.Now(), result)
 }
 
 func updateJobStatusAt(
@@ -26,9 +35,11 @@ func updateJobStatusAt(
 	key, jid, status string,
 	expire int,
 	updatedAt time.Time,
+	result string,
 ) (int, error) {
 	updatedMs := time2ms(updatedAt)
-	res, err := updateStateScript.Do(conn, 1, key, jid, status, expire, updatedMs)
+	res, err := updateStateScript.Do(conn, 1, key,
+		jid, status, expire, updatedMs, result)
 	return redis.Int(res, err)
 }
 

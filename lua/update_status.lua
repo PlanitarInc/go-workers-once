@@ -5,6 +5,7 @@
 --  [2] New status of the job
 --  [3] New expiration time for the job descriptor
 --  [4] New last update timestamp (in ms) for the job descriptor
+--  [5] Result value of the job, a success result value or an error
 --
 --  Return values:
 --    0  in case of success
@@ -24,6 +25,9 @@ end
 
 val["status"] = ARGV[2]
 val["updated_ms"] = tonumber(ARGV[4])
+if ARGV[5] and ARGV[5] ~= '' then
+  val["result"] = ARGV[5]
+end
 
 local valJson = cjson.encode(val)
 redis.call("SET", KEYS[1], valJson)

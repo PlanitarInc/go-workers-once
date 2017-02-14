@@ -1,6 +1,7 @@
 package once
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/PlanitarInc/go-workers"
@@ -36,9 +37,11 @@ func (r *Middleware) Call(
 		if e := recover(); e != nil {
 			newRetryCount := r.getRetryCount(message)
 			if retryCount < newRetryCount {
-				updateJobStatus(conn, key, jid, StatusRetryWaiting, opts.RetryWaitTime)
+				updateJobStatusWithResult(conn, key,
+					jid, StatusRetryWaiting, opts.RetryWaitTime, val2str(e))
 			} else {
-				updateJobStatus(conn, key, jid, StatusFailed, opts.FailureRetention)
+				updateJobStatusWithResult(conn, key,
+					jid, StatusFailed, opts.FailureRetention, val2str(e))
 			}
 
 			panic(e)
@@ -69,5 +72,14 @@ func (r *Middleware) getRetryCount(message *workers.Msg) int {
 		return -1
 	} else {
 		return val
+	}
+}
+
+func val2str(val interface{}) string {
+	switch v := val.(type) {
+	case error:
+		return v.Error()
+	default:
+		return fmt.Sprintf("%v", val)
 	}
 }

@@ -23,6 +23,7 @@ type JobDesc struct {
 	CreatedMs int64    `json:"created_ms"`
 	UpdatedMs int64    `json:"updated_ms"`
 	Options   *Options `json:"options"`
+	Result    string   `json:"result"`
 }
 
 type Options struct {

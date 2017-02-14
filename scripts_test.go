@@ -10,45 +10,84 @@ import (
 )
 
 func TestUpdateJobStatus(t *testing.T) {
-	RegisterTestingT(t)
-
-	setupRedis()
-	defer cleanRedis()
-
 	conn := workers.Config.Pool.Get()
 	defer conn.Close()
 
 	key := "test-key:ok"
 	val := `{"jid":"1"}`
 
-	{
-		res, err := redis.String(conn.Do("SET", key, val))
-		Ω(err).Should(BeNil())
-		Ω(res).Should(Equal("OK"))
-	}
+	t.Run("With Result", func(t *testing.T) {
+		RegisterTestingT(t)
 
-	{
-		res, err := updateJobStatusAt(conn, key, "1", "BEGALA", 10,
-			time.Unix(1, 1e6))
-		Ω(err).Should(BeNil())
-		Ω(res).Should(Equal(0))
-	}
+		setupRedis()
+		defer cleanRedis()
 
-	{
-		res, err := redis.String(conn.Do("GET", key))
-		Ω(err).Should(BeNil())
-		Ω(res).Should(MatchJSON(`{
+		{
+			res, err := redis.String(conn.Do("SET", key, val))
+			Ω(err).Should(BeNil())
+			Ω(res).Should(Equal("OK"))
+		}
+
+		{
+			res, err := updateJobStatusAt(conn, key, "1", "BEGALA", 10,
+				time.Unix(1, 1e6), "-result-")
+			Ω(err).Should(BeNil())
+			Ω(res).Should(Equal(0))
+		}
+
+		{
+			res, err := redis.String(conn.Do("GET", key))
+			Ω(err).Should(BeNil())
+			Ω(res).Should(MatchJSON(`{
+			"jid":"1",
+			"status":"BEGALA",
+			"result": "-result-",
+			"updated_ms":1001
+		}`))
+		}
+
+		{
+			res, err := redis.Int(conn.Do("TTL", key))
+			Ω(err).Should(BeNil())
+			Ω(res).Should(Equal(10))
+		}
+	})
+
+	t.Run("Empty Result", func(t *testing.T) {
+		RegisterTestingT(t)
+
+		setupRedis()
+		defer cleanRedis()
+
+		{
+			res, err := redis.String(conn.Do("SET", key, val))
+			Ω(err).Should(BeNil())
+			Ω(res).Should(Equal("OK"))
+		}
+
+		{
+			res, err := updateJobStatusAt(conn, key, "1", "BEGALA", 10,
+				time.Unix(1, 1e6), "")
+			Ω(err).Should(BeNil())
+			Ω(res).Should(Equal(0))
+		}
+
+		{
+			res, err := redis.String(conn.Do("GET", key))
+			Ω(err).Should(BeNil())
+			Ω(res).Should(MatchJSON(`{
 			"jid":"1",
 			"status":"BEGALA",
 			"updated_ms":1001
 		}`))
-	}
+		}
 
-	{
-		res, err := redis.Int(conn.Do("TTL", key))
-		Ω(err).Should(BeNil())
-		Ω(res).Should(Equal(10))
-	}
+		{
+			res, err := redis.Int(conn.Do("TTL", key))
+			Ω(err).Should(BeNil())
+			Ω(res).Should(Equal(10))
+		}
+	})
 }
 
 func TestUpdateJobStatus_NoKey(t *testing.T) {
@@ -70,7 +109,7 @@ func TestUpdateJobStatus_NoKey(t *testing.T) {
 
 	{
 		res, err := updateJobStatusAt(conn, key, "1", "PRIGALA", 10,
-			time.Unix(1, 1e6))
+			time.Unix(1, 1e6), "")
 		Ω(err).Should(BeNil())
 		Ω(res).Should(Equal(-1))
 	}
@@ -102,7 +141,7 @@ func TestUpdateJobStatus_WrongJID(t *testing.T) {
 
 	{
 		res, err := updateJobStatusAt(conn, key, "–", "POLZALA", 10,
-			time.Unix(1, 1e6))
+			time.Unix(1, 1e6), "")
 		Ω(err).Should(BeNil())
 		Ω(res).Should(Equal(-2))
 	}
