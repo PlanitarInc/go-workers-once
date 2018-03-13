@@ -2,4 +2,4 @@
 default: build
 
 build:
-	make -C lua
+	go generate ./...
