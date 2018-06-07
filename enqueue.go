@@ -5,21 +5,25 @@ import (
 	"time"
 
 	"github.com/PlanitarInc/go-workers"
-	"github.com/garyburd/redigo/redis"
 	"github.com/gocql/gocql"
+	"github.com/gomodule/redigo/redis"
 )
 
+// Enqueue schedules the given task to the given queue, if no task of the same
+// type is already scheduled.
 func Enqueue(
 	queue, jobType string,
 	args interface{},
 	opts *Options,
 ) (string, error) {
-	jid := generateJid()
-	desc := NewJobDesc(jid, queue, jobType, opts)
-
-	return enqueueJobDesc(desc, args)
+	return enqueueJobDesc(
+		NewJobDesc(generateJid(), queue, jobType, opts),
+		args,
+	)
 }
 
+// Enqueue schedules the given task to the given queue with the given delay, if
+// no task of the same type is already scheduled.
 func EnqueueIn(
 	queue, jobType string,
 	in time.Duration,
@@ -31,18 +35,45 @@ func EnqueueIn(
 	}
 	opts.At = workers.NowToSecondsWithNanoPrecision() + in.Seconds()
 
-	return Enqueue(queue, jobType, args, opts)
+	return enqueueJobDesc(
+		NewJobDesc(generateJid(), queue, jobType, opts),
+		args,
+	)
 }
 
+// Enqueue schedules the given task to the given queue. If a task of the same
+// type is already scheduled, the given task will get scheduled anyway.
 func EnqueueForce(
 	queue, jobType string,
 	args interface{},
 	opts *Options,
 ) (string, error) {
-	jid := generateJid()
-	desc := NewJobDesc(jid, queue, jobType, opts)
+	return enqueueJobDesc(
+		NewJobDesc(generateJid(), queue, jobType, opts),
+		args,
+		true,
+	)
+}
 
-	return enqueueJobDesc(desc, args, true)
+// Enqueue schedules the given task to the given queue with the given delay.
+// If a task of the same type is already scheduled, the given task will get
+// scheduled anyway.
+func EnqueueForceIn(
+	queue, jobType string,
+	in time.Duration,
+	args interface{},
+	opts *Options,
+) (string, error) {
+	if opts == nil {
+		opts = &Options{}
+	}
+	opts.At = workers.NowToSecondsWithNanoPrecision() + in.Seconds()
+
+	return enqueueJobDesc(
+		NewJobDesc(generateJid(), queue, jobType, opts),
+		args,
+		true,
+	)
 }
 
 func enqueueJobDesc(desc *JobDesc, args interface{}, override ...bool) (string, error) {

@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/PlanitarInc/go-workers-once/lua"
-	"github.com/garyburd/redigo/redis"
+	"github.com/gomodule/redigo/redis"
 )
 
 var (
