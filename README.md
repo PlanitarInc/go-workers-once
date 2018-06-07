@@ -16,7 +16,7 @@ The fork adds a support for 2 additional functions:
 Enqueue your tasks with `EnqueueOnce()`, add a customized middleware
 to take care of these tasks.
 
-### Example
+#### Example
 
 ```go
 package main
@@ -67,3 +67,27 @@ func main() {
   once.WaitForJobType("myqueue", "add-1-2")
 }
 ```
+
+### Develop
+
+Test your changes, if you have Redis listening on localhost:
+
+```sh
+go test ./...
+```
+
+Test your changes, if you have a remote Redis:
+
+```sh
+REDIS_HOST=<REDIS_HOST> go test ./...
+```
+
+### Release
+
+```sh
+go generate ./...
+git add lua/script.go
+git commit
+```
+
+
