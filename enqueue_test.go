@@ -6,12 +6,17 @@ import (
 
 	"github.com/PlanitarInc/go-workers"
 	"github.com/bitly/go-simplejson"
+	"github.com/gocql/gocql"
 	"github.com/gomodule/redigo/redis"
 	. "github.com/onsi/gomega"
 )
 
 func TestGenerateJID(t *testing.T) {
 	RegisterTestingT(t)
+
+	id, err := gocql.ParseUUID(generateJid())
+	Ω(err).ShouldNot(HaveOccurred())
+	Ω(id).ShouldNot(Equal(gocql.UUID{}))
 }
 
 func TestUnsetJobDesc(t *testing.T) {
