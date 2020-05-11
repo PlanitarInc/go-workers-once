@@ -84,6 +84,10 @@ func NewJobDesc(jid, queue, jobType string, opts *Options) *JobDesc {
 	}
 }
 
+func (d JobDesc) IsInitWaiting() bool {
+	return d.Status == StatusInitWaiting
+}
+
 func (d JobDesc) IsDone() bool {
 	return d.Status == StatusOK || d.Status == StatusFailed
 }
