@@ -10,7 +10,11 @@ import (
 )
 
 // Enqueue schedules the given task to the given queue, if no task of the same
-// type is already scheduled.
+// type is already scheduled to run yet. If there is a task of the same type but
+// it is executing or was executed at least once (waiting for a retry, failed or
+// succeeded), a new task is scheduled anyway basically overriding the existing
+// one. It should not matter since the tasks are of the same type and hence
+// should be identical.
 func Enqueue(
 	queue, jobType string,
 	args interface{},
@@ -23,7 +27,11 @@ func Enqueue(
 }
 
 // Enqueue schedules the given task to the given queue with the given delay, if
-// no task of the same type is already scheduled.
+// no task of the same type is already scheduled to run yet. If there is a task
+// of the same type but it is executing or was executed at least once (waiting
+// for a retry, failed or succeeded), a new task is scheduled anyway basically
+// overriding the existing one. It should not matter since the tasks are of the
+// same type and hence should be identical.
 func EnqueueIn(
 	queue, jobType string,
 	in time.Duration,
@@ -42,7 +50,8 @@ func EnqueueIn(
 }
 
 // Enqueue schedules the given task to the given queue. If a task of the same
-// type is already scheduled, the given task will get scheduled anyway.
+// type is already scheduled, the given task will get scheduled anyway
+// overriding the previous one.
 func EnqueueForce(
 	queue, jobType string,
 	args interface{},
@@ -57,7 +66,7 @@ func EnqueueForce(
 
 // Enqueue schedules the given task to the given queue with the given delay.
 // If a task of the same type is already scheduled, the given task will get
-// scheduled anyway.
+// scheduled anyway overriding the previous one.
 func EnqueueForceIn(
 	queue, jobType string,
 	in time.Duration,
@@ -135,14 +144,32 @@ func trySetNewDescJob(
 			return nil, err
 		}
 
-		// There is a scheduled job
+		// There is a scheduled job, inspect it
 		if err == nil {
 			otherDesc := JobDesc{}
-			err = json.Unmarshal(otherDescJson, &otherDesc)
-			return &otherDesc, err
+			err := json.Unmarshal(otherDescJson, &otherDesc)
+			// The job is still waiting to be executed for the first time,
+			// return it
+			if err == nil && otherDesc.IsInitWaiting() {
+				return &otherDesc, err
+			}
+
+			// Either the job descriptor is bad, or it was already executed at
+			// least once -- reschedule
+			_, err = redis.String(conn.Do("SET", key, descJson, "EX", expire, "XX"))
+			if err != nil && err != redis.ErrNil {
+				return nil, err
+			}
+
+			if err == nil {
+				return nil, nil
+			}
+
+			// retry
+			continue
 		}
 
-		// No job is scheduled, try to enqueue
+		// No job is scheduled, try to add a new one
 		_, err = redis.String(conn.Do("SET", key, descJson, "EX", expire, "NX"))
 		if err != nil && err != redis.ErrNil {
 			return nil, err
@@ -151,6 +178,8 @@ func trySetNewDescJob(
 		if err == nil {
 			return nil, nil
 		}
+
+		// retry
 	}
 }
 
