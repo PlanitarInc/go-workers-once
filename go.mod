@@ -1,6 +1,6 @@
 module github.com/PlanitarInc/go-workers-once
 
-go 1.14
+go 1.16
 
 require (
 	github.com/PlanitarInc/go-workers v0.0.0-20200511175112-adc6d1827aba

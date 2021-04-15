@@ -148,9 +148,7 @@ func trySetNewDescJob(
 		if err == nil {
 			otherDesc := JobDesc{}
 			err := json.Unmarshal(otherDescJson, &otherDesc)
-			// The job is still waiting to be executed for the first time,
-			// return it
-			if err == nil && otherDesc.IsInitWaiting() {
+			if err == nil && !otherDesc.CanBeOverridden() {
 				return &otherDesc, err
 			}
 

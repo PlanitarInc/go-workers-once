@@ -197,46 +197,60 @@ func TestTrySetNewJobDesc_Preexists(t *testing.T) {
 	conn := workers.Config.Pool.Get()
 	defer conn.Close()
 
-	t.Run("init-waiting", func(t *testing.T) {
-		RegisterTestingT(t)
+	t.Run("default", func(t *testing.T) {
+		reschduleStatuses := []string{StatusInitWaiting, StatusExecuting, StatusRetryWaiting, StatusOK, StatusFailed}
 
-		key := "test-key:try-set-job:preexists:init-waiting"
-		val := `{"jid":"1"}`
-		oldval := `{"jid":"123","status":"init-waiting"}`
+		for _, s := range reschduleStatuses {
+			t.Run(s, func(t *testing.T) {
+				RegisterTestingT(t)
 
-		{
-			res, err := redis.String(conn.Do("SET", key, oldval))
-			Ω(err).Should(BeNil())
-			Ω(res).Should(Equal("OK"))
+				key := "test-key:try-set-job:default:preexists:" + s
+				val := `{"jid":"1"}`
+				oldval := `{"jid":"123","status":"` + s + `"}`
+
+				{
+					var d JobDesc
+					Ω(json.Unmarshal([]byte(oldval), &d)).Should(BeNil())
+					Ω(d.Options).Should(BeNil())
+				}
+
+				{
+					res, err := redis.String(conn.Do("SET", key, oldval))
+					Ω(err).Should(BeNil())
+					Ω(res).Should(Equal("OK"))
+				}
+
+				{
+					desc, err := trySetNewDescJob(conn, key, 100, []byte(val))
+					Ω(err).Should(BeNil())
+					Ω(desc).Should(Equal(&JobDesc{Jid: "123", Status: s}))
+				}
+
+				{
+					res, err := redis.String(conn.Do("GET", key))
+					Ω(err).Should(BeNil())
+					Ω(res).Should(Equal(oldval))
+				}
+
+				{
+					res, err := redis.Int(conn.Do("TTL", key))
+					Ω(err).Should(BeNil())
+					Ω(res).Should(Equal(-1))
+				}
+			})
 		}
 
-		{
-			desc, err := trySetNewDescJob(conn, key, 100, []byte(val))
-			Ω(err).Should(BeNil())
-			Ω(desc).Should(Equal(&JobDesc{Jid: "123", Status: StatusInitWaiting}))
-		}
-
-		{
-			res, err := redis.String(conn.Do("GET", key))
-			Ω(err).Should(BeNil())
-			Ω(res).Should(Equal(oldval))
-		}
-
-		{
-			res, err := redis.Int(conn.Do("TTL", key))
-			Ω(err).Should(BeNil())
-			Ω(res).Should(Equal(-1))
-		}
-	})
-
-	reschduleStatuses := []string{StatusExecuting, StatusRetryWaiting, StatusOK, StatusFailed}
-	for _, s := range reschduleStatuses {
-		t.Run(s, func(t *testing.T) {
+		t.Run("badDescriptor", func(t *testing.T) {
 			RegisterTestingT(t)
 
-			key := "test-key:try-set-job:preexists:" + s
+			key := "test-key:try-set-job:preexists:default:bad-descriptor"
 			val := `{"jid":"1"}`
-			oldval := `{"jid":"123","status":"` + s + `"}`
+			oldval := `"jid":"123"}`
+
+			{
+				var d JobDesc
+				Ω(json.Unmarshal([]byte(oldval), &d)).ShouldNot(BeNil())
+			}
 
 			{
 				res, err := redis.String(conn.Do("SET", key, oldval))
@@ -262,38 +276,130 @@ func TestTrySetNewJobDesc_Preexists(t *testing.T) {
 				Ω(res).Should(Equal(100))
 			}
 		})
-	}
+	})
 
-	t.Run("badDescriptor", func(t *testing.T) {
-		RegisterTestingT(t)
+	t.Run("override-started", func(t *testing.T) {
+		t.Run("init-waiting", func(t *testing.T) {
+			RegisterTestingT(t)
 
-		key := "test-key:try-set-job:preexists:bad-descriptor"
-		val := `{"jid":"1"}`
-		oldval := `"jid":"123"}`
+			key := "test-key:try-set-job:preexists:override:init-waiting"
+			val := `{"jid":"1"}`
+			oldval := `{"jid":"123","status":"init-waiting","options":{"override_started":true}}`
 
-		{
-			res, err := redis.String(conn.Do("SET", key, oldval))
-			Ω(err).Should(BeNil())
-			Ω(res).Should(Equal("OK"))
+			{
+				var d JobDesc
+				Ω(json.Unmarshal([]byte(oldval), &d)).Should(BeNil())
+				Ω(d.Options).ShouldNot(BeNil())
+				Ω(d.Options.OverrideStarted).Should(BeTrue())
+			}
+
+			{
+				res, err := redis.String(conn.Do("SET", key, oldval))
+				Ω(err).Should(BeNil())
+				Ω(res).Should(Equal("OK"))
+			}
+
+			{
+				desc, err := trySetNewDescJob(conn, key, 100, []byte(val))
+				Ω(err).Should(BeNil())
+				Ω(desc).Should(Equal(&JobDesc{
+					Jid:     "123",
+					Status:  StatusInitWaiting,
+					Options: &Options{OverrideStarted: true},
+				}))
+			}
+
+			{
+				res, err := redis.String(conn.Do("GET", key))
+				Ω(err).Should(BeNil())
+				Ω(res).Should(Equal(oldval))
+			}
+
+			{
+				res, err := redis.Int(conn.Do("TTL", key))
+				Ω(err).Should(BeNil())
+				Ω(res).Should(Equal(-1))
+			}
+		})
+
+		reschduleStatuses := []string{StatusExecuting, StatusRetryWaiting, StatusOK, StatusFailed}
+		for _, s := range reschduleStatuses {
+			t.Run(s, func(t *testing.T) {
+				RegisterTestingT(t)
+
+				key := "test-key:try-set-job:preexists:override:" + s
+				val := `{"jid":"1"}`
+				oldval := `{"jid":"123","status":"` + s + `","options":{"override_started":true}}`
+
+				{
+					var d JobDesc
+					Ω(json.Unmarshal([]byte(oldval), &d)).Should(BeNil())
+					Ω(d.Options).ShouldNot(BeNil())
+					Ω(d.Options.OverrideStarted).Should(BeTrue())
+				}
+
+				{
+					res, err := redis.String(conn.Do("SET", key, oldval))
+					Ω(err).Should(BeNil())
+					Ω(res).Should(Equal("OK"))
+				}
+
+				{
+					desc, err := trySetNewDescJob(conn, key, 100, []byte(val))
+					Ω(err).Should(BeNil())
+					Ω(desc).Should(BeNil())
+				}
+
+				{
+					res, err := redis.String(conn.Do("GET", key))
+					Ω(err).Should(BeNil())
+					Ω(res).Should(Equal(val))
+				}
+
+				{
+					res, err := redis.Int(conn.Do("TTL", key))
+					Ω(err).Should(BeNil())
+					Ω(res).Should(Equal(100))
+				}
+			})
 		}
 
-		{
-			desc, err := trySetNewDescJob(conn, key, 100, []byte(val))
-			Ω(err).Should(BeNil())
-			Ω(desc).Should(BeNil())
-		}
+		t.Run("badDescriptor", func(t *testing.T) {
+			RegisterTestingT(t)
 
-		{
-			res, err := redis.String(conn.Do("GET", key))
-			Ω(err).Should(BeNil())
-			Ω(res).Should(Equal(val))
-		}
+			key := "test-key:try-set-job:preexists:override:bad-descriptor"
+			val := `{"jid":"1"}`
+			oldval := `"jid":"123"}`
 
-		{
-			res, err := redis.Int(conn.Do("TTL", key))
-			Ω(err).Should(BeNil())
-			Ω(res).Should(Equal(100))
-		}
+			{
+				var d JobDesc
+				Ω(json.Unmarshal([]byte(oldval), &d)).ShouldNot(BeNil())
+			}
+
+			{
+				res, err := redis.String(conn.Do("SET", key, oldval))
+				Ω(err).Should(BeNil())
+				Ω(res).Should(Equal("OK"))
+			}
+
+			{
+				desc, err := trySetNewDescJob(conn, key, 100, []byte(val))
+				Ω(err).Should(BeNil())
+				Ω(desc).Should(BeNil())
+			}
+
+			{
+				res, err := redis.String(conn.Do("GET", key))
+				Ω(err).Should(BeNil())
+				Ω(res).Should(Equal(val))
+			}
+
+			{
+				res, err := redis.Int(conn.Do("TTL", key))
+				Ω(err).Should(BeNil())
+				Ω(res).Should(Equal(100))
+			}
+		})
 	})
 }
 
@@ -411,56 +517,99 @@ func TestEnqueueJobDesc_PreexistsExecuting(t *testing.T) {
 	conn := workers.Config.Pool.Get()
 	defer conn.Close()
 
-	desc := NewJobDesc("2", "tor-preexists-executing", "typo", nil)
-	key := workers.Config.Namespace + "once:q:tor-preexists-executing:typo"
-	oldval := `{"jid":"123","status":"executing"}`
-	descJson, _ := json.Marshal(desc)
+	t.Run("default", func(t *testing.T) {
+		RegisterTestingT(t)
 
-	{
-		res, err := redis.String(conn.Do("SET", key, oldval))
-		Ω(err).Should(BeNil())
-		Ω(res).Should(Equal("OK"))
-	}
+		desc := NewJobDesc("2", "tor-preexists-default-executing", "typo", nil)
+		key := workers.Config.Namespace + "once:q:tor-preexists-default-executing:typo"
+		oldval := `{"jid":"123","status":"executing"}`
 
-	{
-		jid, err := enqueueJobDesc(desc, nil)
-		Ω(err).Should(BeNil())
-		Ω(jid).Should(Equal("2"))
-	}
+		{
+			res, err := redis.String(conn.Do("SET", key, oldval))
+			Ω(err).Should(BeNil())
+			Ω(res).Should(Equal("OK"))
+		}
 
-	{
-		res, err := redis.Bytes(conn.Do("GET", key))
-		Ω(err).Should(BeNil())
-		Ω(res).Should(Equal(descJson))
-	}
+		{
+			jid, err := enqueueJobDesc(desc, nil)
+			Ω(err).Should(BeNil())
+			Ω(jid).Should(Equal("123"))
+		}
 
-	{
-		res, err := redis.Int(conn.Do("TTL", key))
-		Ω(err).Should(BeNil())
-		Ω(res).Should(Equal(30))
-	}
+		{
+			res, err := redis.String(conn.Do("GET", key))
+			Ω(err).Should(BeNil())
+			Ω(res).Should(Equal(oldval))
+		}
 
-	{
-		queue := workers.Config.Namespace + "queue:tor-preexists-executing"
-		bs, err := redis.Bytes(conn.Do("lpop", queue))
-		Ω(err).Should(BeNil())
+		{
+			res, err := redis.Int(conn.Do("TTL", key))
+			Ω(err).Should(BeNil())
+			Ω(res).Should(Equal(-1))
+		}
 
-		msg, err := simplejson.NewJson(bs)
-		Ω(err).Should(BeNil())
-		Ω(msg).ShouldNot(BeNil())
+		{
+			queue := workers.Config.Namespace + "queue:tor-preexists-default-executing"
+			n, err := redis.Int(conn.Do("llen", queue))
+			Ω(err).Should(BeNil())
+			Ω(n).Should(Equal(0))
+		}
+	})
 
-		tmp, err := msg.Get("x-once").Encode()
-		Ω(err).Should(BeNil())
-		Ω(tmp).Should(MatchJSON(descJson))
+	t.Run("override-started", func(t *testing.T) {
+		RegisterTestingT(t)
 
-		msg.Del("at")
-		msg.Del("enqueued_at")
-		msg.Del("x-once")
-		tmp, err = msg.Encode()
-		Ω(err).Should(BeNil())
-		Ω(tmp).Should(
-			MatchJSON(`{"jid":"2","queue":"tor-preexists-executing","class":"","args":null}`))
-	}
+		desc := NewJobDesc("3", "tor-preexists-override-executing", "typo3", nil)
+		key := workers.Config.Namespace + "once:q:tor-preexists-override-executing:typo3"
+		oldval := `{"jid":"123","status":"executing","options":{"override_started":true}}`
+		descJson, _ := json.Marshal(desc)
+
+		{
+			res, err := redis.String(conn.Do("SET", key, oldval))
+			Ω(err).Should(BeNil())
+			Ω(res).Should(Equal("OK"))
+		}
+
+		{
+			jid, err := enqueueJobDesc(desc, nil)
+			Ω(err).Should(BeNil())
+			Ω(jid).Should(Equal("3"))
+		}
+
+		{
+			res, err := redis.Bytes(conn.Do("GET", key))
+			Ω(err).Should(BeNil())
+			Ω(res).Should(Equal(descJson))
+		}
+
+		{
+			res, err := redis.Int(conn.Do("TTL", key))
+			Ω(err).Should(BeNil())
+			Ω(res).Should(Equal(30))
+		}
+
+		{
+			queue := workers.Config.Namespace + "queue:tor-preexists-override-executing"
+			bs, err := redis.Bytes(conn.Do("lpop", queue))
+			Ω(err).Should(BeNil())
+
+			msg, err := simplejson.NewJson(bs)
+			Ω(err).Should(BeNil())
+			Ω(msg).ShouldNot(BeNil())
+
+			tmp, err := msg.Get("x-once").Encode()
+			Ω(err).Should(BeNil())
+			Ω(tmp).Should(MatchJSON(descJson))
+
+			msg.Del("at")
+			msg.Del("enqueued_at")
+			msg.Del("x-once")
+			tmp, err = msg.Encode()
+			Ω(err).Should(BeNil())
+			Ω(tmp).Should(
+				MatchJSON(`{"jid":"3","queue":"tor-preexists-override-executing","class":"","args":null}`))
+		}
+	})
 }
 
 func TestEnqueueJobDesc_Overrides(t *testing.T) {

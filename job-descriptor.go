@@ -29,6 +29,7 @@ type JobDesc struct {
 type Options struct {
 	workers.EnqueueOptions
 	AtMostOnce       bool `json:"at_most_once"`
+	OverrideStarted  bool `json:"override_started"`
 	InitWaitTime     int  `json:"init_wait"`
 	RetryWaitTime    int  `json:"retry_wait"`
 	ExecWaitTime     int  `json:"exec_wait"`
@@ -82,6 +83,12 @@ func NewJobDesc(jid, queue, jobType string, opts *Options) *JobDesc {
 		CreatedMs: time2ms(time.Now()),
 		Options:   optionsMergeDefaults(opts),
 	}
+}
+
+func (d JobDesc) CanBeOverridden() bool {
+	// If OverrideStarted is set, we can override the task already started.
+	// Otherwise we have to wait until the task is removed from Redis.
+	return d.Options != nil && d.Options.OverrideStarted && d.Status != StatusInitWaiting
 }
 
 func (d JobDesc) IsInitWaiting() bool {
