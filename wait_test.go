@@ -369,7 +369,7 @@ func TestWaitForJobType_FalsePublish(t *testing.T) {
 	conn := workers.Config.Pool.Get()
 	defer conn.Close()
 
-	queue := "wait-5"
+	queue := "wait-9"
 	jobType := "email"
 	key := workers.Config.Namespace + "once:q:" + queue + ":" + jobType
 

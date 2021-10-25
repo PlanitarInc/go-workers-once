@@ -1,9 +1,9 @@
 package once
 
 import (
+	_ "embed"
 	"time"
 
-	"github.com/PlanitarInc/go-workers-once/lua"
 	"github.com/gomodule/redigo/redis"
 )
 
@@ -43,11 +43,9 @@ func updateJobStatusAt(
 	return redis.Int(res, err)
 }
 
-func init() {
-	bs, err := lua.Asset("update_status.lua")
-	if err != nil {
-		panic(err)
-	}
+//go:embed update_status.lua
+var updateStatusScript string
 
-	updateStateScript = redis.NewScript(-1, string(bs))
+func init() {
+	updateStateScript = redis.NewScript(-1, updateStatusScript)
 }
