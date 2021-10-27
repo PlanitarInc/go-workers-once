@@ -72,5 +72,5 @@ func TestNewJobDesc(t *testing.T) {
 
 	nowMs := time2ms(time.Now())
 	Ω(d.CreatedMs).Should(BeBetween(nowMs-100, nowMs+100))
-	Ω(d.UpdatedMs).Should(BeBetween(nowMs-100, nowMs+100))
+	Ω(d.UpdatedMs).Should(Equal(d.CreatedMs))
 }

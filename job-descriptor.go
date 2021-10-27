@@ -75,15 +75,15 @@ func optionsMergeDefaults(opts *Options) *Options {
 }
 
 func NewJobDesc(jid, queue, jobType string, opts *Options) *JobDesc {
-	curTime2ms := time2ms(time.Now())
+	nowMs := time2ms(time.Now())
 
 	return &JobDesc{
 		Jid:       jid,
 		Status:    StatusInitWaiting,
 		Queue:     queue,
 		JobType:   jobType,
-		CreatedMs: curTime2ms,
-		UpdatedMs: curTime2ms,
+		CreatedMs: nowMs,
+		UpdatedMs: nowMs,
 		Options:   optionsMergeDefaults(opts),
 	}
 }
