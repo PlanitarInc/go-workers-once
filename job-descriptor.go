@@ -80,7 +80,8 @@ func NewJobDesc(jid, queue, jobType string, opts *Options) *JobDesc {
 		Status:    StatusInitWaiting,
 		Queue:     queue,
 		JobType:   jobType,
-		CreatedMs: time2ms(time.Now()),
+		CreatedMs: getCurrentTime2ms(),
+		UpdatedMs: getCurrentTime2ms(),
 		Options:   optionsMergeDefaults(opts),
 	}
 }
@@ -113,6 +114,10 @@ func (d JobDesc) CreatedAt() time.Time {
 
 func (d JobDesc) UpdatedAt() time.Time {
 	return ms2time(d.UpdatedMs)
+}
+
+func getCurrentTime2ms() int64 {
+	return time2ms(time.Now())
 }
 
 func time2ms(t time.Time) int64 {
