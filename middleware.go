@@ -38,7 +38,7 @@ func (r *Middleware) Call(
 			newRetryCount := r.getRetryCount(message)
 			if retryCount < newRetryCount {
 				updateJobStatusWithResult(conn, key,
-					jid, StatusRetryWaiting, opts.RetryWaitTime, val2str(e))
+					jid, StatusRetryWaiting, opts.RetryTimeout, val2str(e))
 			} else {
 				updateJobStatusWithResult(conn, key,
 					jid, StatusFailed, opts.FailureRetention, val2str(e))
@@ -48,7 +48,7 @@ func (r *Middleware) Call(
 		}
 	}()
 
-	n, _ := updateJobStatus(conn, key, jid, StatusExecuting, opts.ExecWaitTime)
+	n, _ := updateJobStatus(conn, key, jid, StatusExecuting, opts.ExecTimeout)
 	if opts.AtMostOnce && n < 0 {
 		// Two reasons for getting here:
 		//  - (n=-1) the retention init/retry period of the job has elapsed,

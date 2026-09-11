@@ -30,9 +30,9 @@ type Options struct {
 	workers.EnqueueOptions
 	AtMostOnce       bool `json:"at_most_once"`
 	OverrideStarted  bool `json:"override_started"`
-	InitWaitTime     int  `json:"init_wait"`
-	RetryWaitTime    int  `json:"retry_wait"`
-	ExecWaitTime     int  `json:"exec_wait"`
+	InitTimeout      int  `json:"init_wait"`
+	RetryTimeout     int  `json:"retry_wait"`
+	ExecTimeout      int  `json:"exec_wait"`
 	SuccessRetention int  `json:"success_retention"`
 	FailureRetention int  `json:"failure_retention"`
 }
@@ -41,9 +41,9 @@ func optionsFromJson(obj *simplejson.Json) *Options {
 	opts := Options{}
 
 	opts.AtMostOnce, _ = obj.Get("at_most_once").Bool()
-	opts.InitWaitTime, _ = obj.Get("init_wait").Int()
-	opts.RetryWaitTime, _ = obj.Get("retry_wait").Int()
-	opts.ExecWaitTime, _ = obj.Get("exec_wait").Int()
+	opts.InitTimeout, _ = obj.Get("init_wait").Int()
+	opts.RetryTimeout, _ = obj.Get("retry_wait").Int()
+	opts.ExecTimeout, _ = obj.Get("exec_wait").Int()
 	opts.SuccessRetention, _ = obj.Get("success_retention").Int()
 	opts.FailureRetention, _ = obj.Get("failure_retention").Int()
 
@@ -55,14 +55,14 @@ func optionsMergeDefaults(opts *Options) *Options {
 		opts = &Options{}
 	}
 
-	if opts.InitWaitTime == 0 {
-		opts.InitWaitTime = 30
+	if opts.InitTimeout == 0 {
+		opts.InitTimeout = 30
 	}
-	if opts.RetryWaitTime == 0 {
-		opts.RetryWaitTime = 60
+	if opts.RetryTimeout == 0 {
+		opts.RetryTimeout = 60
 	}
-	if opts.ExecWaitTime == 0 {
-		opts.ExecWaitTime = 90
+	if opts.ExecTimeout == 0 {
+		opts.ExecTimeout = 90
 	}
 	if opts.SuccessRetention == 0 {
 		opts.SuccessRetention = 5
