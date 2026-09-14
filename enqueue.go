@@ -98,12 +98,12 @@ func enqueueJobDesc(desc *JobDesc, args interface{}, override ...bool) (string, 
 
 	descJson, _ := msg.Get("x-once").MarshalJSON()
 	if len(override) > 0 && override[0] {
-		err := setNewJobDesc(conn, key, desc.Options.InitWaitTime, descJson)
+		err := setNewJobDesc(conn, key, desc.Options.InitTimeout, descJson)
 		if err != nil {
 			return "", err
 		}
 	} else {
-		other, err := trySetNewDescJob(conn, key, desc.Options.InitWaitTime, descJson)
+		other, err := trySetNewDescJob(conn, key, desc.Options.InitTimeout, descJson)
 		if err != nil {
 			return "", err
 		} else if other != nil {

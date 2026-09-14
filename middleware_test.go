@@ -510,3 +510,214 @@ func getCountableCb() (*int, func() bool) {
 func panicNext() bool {
 	panic("Allahu Akbar!")
 }
+
+// An at-most-once job whose descriptor expired while it was executing must
+// still run when go-workers reschedules it. Before the retry branch in
+// Middleware.Call this was silently dropped: the key was gone (n == -1), which
+// the middleware treated the same as "superseded", so next() was never called.
+//
+// Note what a missing key means for a lock -- nothing else holds it, so the
+// retry is free to proceed.
+func TestMiddlewareCall_AtMostOnce_ExpiredKeyOnRetry(t *testing.T) {
+	RegisterTestingT(t)
+
+	setupRedis()
+	defer cleanRedis()
+
+	conn := workers.Config.Pool.Get()
+	defer conn.Close()
+
+	msg, _ := workers.NewMsg(`{
+		"jid": "9",
+		"retry": true,
+		"retry_count": 1,
+		"x-once": {
+			"jid": "9",
+			"queue": "tur-expired-retry",
+			"job_type": "gershon",
+			"options": {
+				"at_most_once": true,
+				"exec_wait": 120
+			}
+		}
+	}`)
+	queue := "tur-expired-retry"
+	key := workers.Config.Namespace + "once:q:tur-expired-retry:gershon"
+
+	m := Middleware{}
+
+	// The descriptor expired during the previous attempt. Delete it rather than
+	// asserting it is absent: other tests in this package leak keys from
+	// background pub/sub goroutines, so an emptiness assertion here is flaky.
+	{
+		_, err := conn.Do("DEL", key)
+		Ω(err).Should(BeNil())
+	}
+
+	{
+		counter, noopNext := getCountableCb()
+		ack := m.Call(queue, msg, noopNext)
+		Ω(ack).Should(BeTrue())
+		Ω(*counter).Should(Equal(1), "the retry must actually run")
+	}
+
+	// The descriptor was reclaimed, so waiters can observe the outcome again.
+	{
+		res, err := redis.Bytes(conn.Do("GET", key))
+		Ω(err).Should(BeNil())
+
+		desc := JobDesc{}
+		Ω(json.Unmarshal(res, &desc)).Should(BeNil())
+		Ω(desc.Jid).Should(Equal("9"))
+		Ω(desc.JobType).Should(Equal("gershon"))
+		Ω(desc.Status).Should(Equal(StatusOK), "next() succeeded, so the run is recorded")
+	}
+}
+
+// The FIRST retry is the case the fix exists for, and go-workers labels it
+// retry_count=0 (incrementRetry sets 0, not 1, on the first failure). A guard
+// of `retryCount > 0` passes every other test in this file and still drops
+// this one, so it gets its own test.
+func TestMiddlewareCall_AtMostOnce_ExpiredKeyOnFirstRetry(t *testing.T) {
+	RegisterTestingT(t)
+
+	setupRedis()
+	defer cleanRedis()
+
+	conn := workers.Config.Pool.Get()
+	defer conn.Close()
+
+	msg, _ := workers.NewMsg(`{
+		"jid": "9",
+		"retry": true,
+		"retry_count": 0,
+		"x-once": {
+			"jid": "9",
+			"queue": "tur-expired-retry0",
+			"job_type": "gershon",
+			"options": {
+				"at_most_once": true,
+				"exec_wait": 120
+			}
+		}
+	}`)
+	queue := "tur-expired-retry0"
+	key := workers.Config.Namespace + "once:q:tur-expired-retry0:gershon"
+
+	m := Middleware{}
+
+	{
+		_, err := conn.Do("DEL", key)
+		Ω(err).Should(BeNil())
+	}
+
+	{
+		counter, noopNext := getCountableCb()
+		ack := m.Call(queue, msg, noopNext)
+		Ω(ack).Should(BeTrue())
+		Ω(*counter).Should(Equal(1), "the first retry must actually run")
+	}
+
+	{
+		res, err := redis.Bytes(conn.Do("GET", key))
+		Ω(err).Should(BeNil())
+
+		desc := JobDesc{}
+		Ω(json.Unmarshal(res, &desc)).Should(BeNil())
+		Ω(desc.Jid).Should(Equal("9"))
+		Ω(desc.Status).Should(Equal(StatusOK))
+	}
+}
+
+// The same expired-key situation on a FIRST attempt keeps the old behaviour:
+// nothing rescheduled this job, so it is genuinely lost and must be dropped.
+func TestMiddlewareCall_AtMostOnce_ExpiredKeyFirstAttempt(t *testing.T) {
+	RegisterTestingT(t)
+
+	setupRedis()
+	defer cleanRedis()
+
+	conn := workers.Config.Pool.Get()
+	defer conn.Close()
+
+	msg, _ := workers.NewMsg(`{
+		"jid": "10",
+		"retry": true,
+		"x-once": {
+			"jid": "10",
+			"queue": "tur-expired-first",
+			"job_type": "yaffa",
+			"options": {
+				"at_most_once": true
+			}
+		}
+	}`)
+	queue := "tur-expired-first"
+	key := workers.Config.Namespace + "once:q:tur-expired-first:yaffa"
+
+	m := Middleware{}
+
+	{
+		counter, noopNext := getCountableCb()
+		ack := m.Call(queue, msg, noopNext)
+		Ω(ack).Should(BeTrue())
+		Ω(*counter).Should(Equal(0), "a first attempt with no descriptor is still dropped")
+	}
+
+	{
+		_, err := redis.String(conn.Do("GET", key))
+		Ω(err).Should(Equal(redis.ErrNil), "nothing should have been reclaimed")
+	}
+}
+
+// A retry must NOT resurrect itself over a newer job of the same type. This is
+// the regression the SET ... NX guards against: without it the retry would
+// overwrite the newer job's descriptor and both would run.
+func TestMiddlewareCall_AtMostOnce_RetryDoesNotStompNewerJob(t *testing.T) {
+	RegisterTestingT(t)
+
+	setupRedis()
+	defer cleanRedis()
+
+	conn := workers.Config.Pool.Get()
+	defer conn.Close()
+
+	msg, _ := workers.NewMsg(`{
+		"jid": "11",
+		"retry": true,
+		"retry_count": 2,
+		"x-once": {
+			"jid": "11",
+			"queue": "tur-retry-stomp",
+			"job_type": "shlomo",
+			"options": {
+				"at_most_once": true
+			}
+		}
+	}`)
+	queue := "tur-retry-stomp"
+	key := workers.Config.Namespace + "once:q:tur-retry-stomp:shlomo"
+
+	m := Middleware{}
+
+	// A newer job of the same type already owns the descriptor.
+	{
+		res, err := redis.String(conn.Do("SET", key, `{"jid":"999"}`))
+		Ω(err).Should(BeNil())
+		Ω(res).Should(Equal("OK"))
+	}
+
+	{
+		counter, noopNext := getCountableCb()
+		ack := m.Call(queue, msg, noopNext)
+		Ω(ack).Should(BeTrue())
+		Ω(*counter).Should(Equal(0), "the superseded retry must not run")
+	}
+
+	// The newer job's descriptor is untouched.
+	{
+		res, err := redis.Bytes(conn.Do("GET", key))
+		Ω(err).Should(BeNil())
+		Ω(res).Should(MatchJSON(`{"jid":"999"}`))
+	}
+}
